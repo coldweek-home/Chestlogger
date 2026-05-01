@@ -201,7 +201,7 @@ int main() {
     while (1)
     {
 
-		PORTB &= ~(1 << PB3); //Debug LED 
+		//PORTB &= ~(1 << PB3); //Debug LED 
 		set_sleep_mode(sleep_mode);
 		sleep_enable();
 		sleep_cpu();
@@ -496,7 +496,7 @@ void update_display()
 	
 	text.column = 0;
 	text.row = 0;
-	text_str(&text, "Utolsó nyitások");
+	text_str(&text, "Utolsó nyitások\n");
 	
 	if (last_open_times[0] != 0){
 		get_elapsed_time_string(seconds_elapsed - last_open_times[0], time_string);
