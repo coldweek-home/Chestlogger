@@ -13,7 +13,7 @@
 
 // Wiring
 //
-//                    +--------+
+//                    +---++---+
 // ZÖLD - PB5 - N/C  -|        |- VCC - PIROS
 //        PB3 - N/C  -| Tiny85 |- SCL - PB2 - SÁRGA
 //        PB4 - N/C  -|        |- N/C - PB1 - NARANCS
@@ -30,6 +30,7 @@ int my_itoa(int num, char* str, int base);
 void get_elapsed_time_string(uint32_t seconds, char* time_text);
 void start_timer0(uint8_t timer);
 void update_display();
+void start_alarm();
 
 struct OLEDM display;
 
@@ -57,11 +58,11 @@ volatile uint8_t sleep_mode = SLEEP_MODE_PWR_DOWN;
 
 volatile uint32_t seconds_elapsed = 0;  // counts seconds
 volatile uint8_t drift_counter = 0;
-volatile uint8_t watchdog_fired = 0;
 
 volatile uint8_t event_display_off = 0;
 
 volatile uint32_t last_open_times[] = {0,0,0};
+volatile uint32_t last_alert_time = 0;
 volatile uint8_t screen_content = 0;
 
 void christmassMessage(){
@@ -104,6 +105,21 @@ void love_message()
 	screen_content = 3;
 }
 
+void start_alarm() 
+{
+	for (int i=0; i<3; i++)
+	{
+		for (int j=0; j<3; j++)
+		{
+			PORTB |= (1 << PB3);
+			_delay_ms(100);
+			PORTB &= ~(1 << PB3);
+			if (j < 2) _delay_ms(100);
+		}
+		if (i < 2) _delay_ms(500);
+	}
+}
+
 uint8_t counter = 0;
 
 
@@ -134,7 +150,8 @@ uint8_t timers[2];
 #define EVENT_PB1_ON 3
 #define EVENT_PB1_OFF 4
 #define EVENT_DIPLAY_OFF 5
-#define EVENT_NUMBER 6
+#define EVENT_START_ALARM 6
+#define EVENT_NUMBER 7 // this must be the last one
 
 volatile uint8_t events[EVENT_NUMBER];
 
@@ -165,9 +182,7 @@ int main() {
 #ifdef OLED_CONNECTED
 	OLEDM_INIT(&display);
 	text_init(&text, terminus8x16_var1, &display);
-	oledm_start(&display);
-	oledm_display_on(&display);
-	
+	oledm_start(&display);	
 	update_display();
 #endif
 	
@@ -201,37 +216,56 @@ int main() {
     while (1)
     {
 
-		//PORTB &= ~(1 << PB3); //Debug LED 
-		set_sleep_mode(sleep_mode);
-		sleep_enable();
-		sleep_cpu();
-		sleep_disable();
+		cli();
+		uint8_t has_event = is_active_event();
 		
-		while(is_active_event())
-		{
-			if (GET_EVENT(EVENT_PB4_ON)) {
-				CLEAR_EVENT(EVENT_PB4_ON);
-				PORTB |= (1 << PB3);  //Debug LED
-				button_state_changed_pb4(0);
-			}
-			if (GET_EVENT(EVENT_PB4_OFF)){
-				CLEAR_EVENT(EVENT_PB4_OFF);
-				PORTB &= ~(1 << PB3); //Debug LED
-			}
-			if (GET_EVENT(EVENT_PB1_OFF)) {
-				CLEAR_EVENT(EVENT_PB1_OFF);
-			}
-			if (GET_EVENT(EVENT_PB1_ON)) {
-				CLEAR_EVENT(EVENT_PB1_ON);
-				chest_opened();
-			}
-			if (GET_EVENT(EVENT_DIPLAY_OFF)){
-				CLEAR_EVENT(EVENT_DIPLAY_OFF);
+		if (!has_event) {
+			set_sleep_mode(sleep_mode);
+			sleep_enable();
+			sei();
+			sleep_cpu();
+			_delay_ms(5);
+			sleep_disable();
+		}
+		else{
+			sei();
+		}
+
+		cli();
+		uint8_t e_pb4_on  = GET_EVENT(EVENT_PB4_ON);
+		uint8_t e_pb4_off = GET_EVENT(EVENT_PB4_OFF);
+		uint8_t e_pb1_on  = GET_EVENT(EVENT_PB1_ON);
+		uint8_t e_pb1_off = GET_EVENT(EVENT_PB1_OFF);
+		uint8_t e_display_off = GET_EVENT(EVENT_DIPLAY_OFF);
+		uint8_t e_start_alarm = GET_EVENT(EVENT_START_ALARM);
+		CLEAR_EVENT(EVENT_PB4_ON);
+		CLEAR_EVENT(EVENT_PB4_OFF);
+		CLEAR_EVENT(EVENT_PB1_ON);
+		CLEAR_EVENT(EVENT_PB1_OFF);
+		CLEAR_EVENT(EVENT_DIPLAY_OFF);
+		CLEAR_EVENT(EVENT_START_ALARM);
+		sei();		
+		
+		if (e_pb4_on) {
+			// PORTB |= (1 << PB3);  //Debug LED on
+			button_state_changed_pb4(0);
+		}
+		if (e_pb4_off){
+			// PORTB &= ~(1 << PB3); //Debug LED off
+		}
+		if (e_pb1_on){
+			chest_opened();
+		}
+		if (e_pb1_off){
+		}
+		if (e_display_off){
 #ifdef OLED_CONNECTED
-				oledm_display_off(&display);
+			oledm_display_off(&display);
 #endif
-				screen_content = 0;
-			}
+			screen_content = 0;
+		}
+		if (e_start_alarm){
+			start_alarm();
 		}
     }
 }
@@ -255,6 +289,7 @@ void button_state_changed_pb4(uint8_t pb4_state)
 	{
 		if (screen_content == 1){
 			christmassMessage();
+			start_alarm();
 			display_on();
 		}
 		else if (screen_content == 2){
@@ -282,10 +317,7 @@ void chest_opened()
 		last_open_times[0] = seconds_elapsed;
 	}
 	update_display();
-#ifdef OLED_CONNECTED
-	oledm_display_on(&display);
-#endif	
-	start_timer0(TIMER_OLED);
+	display_on();
 }
 
 // ============================
@@ -333,12 +365,10 @@ ISR(TIM0_COMPA_vect)
 			timer_debounce_counter = 0;
 			TIMER_OFF(TIMER_DEBOUNCE);
 
-			// Handle PB4
-			if (pb4_event) {
-				uint8_t new_state = (PINB & (1 << PB4)) ? 1 : 0;
+			uint8_t new_state = (PINB & (1 << PB4)) ? 1 : 0;
+			if (new_state != pb4_prev_state) {
 				if (new_state) SET_EVENT(EVENT_PB4_OFF);
 				else SET_EVENT(EVENT_PB4_ON);
-				pb4_event = 0;
 				pb4_prev_state = new_state;
 			}
 
@@ -352,7 +382,7 @@ ISR(TIM0_COMPA_vect)
 			}
 
 			// Re-enable pin change interrupts
-			GIMSK |= (1 << PCIE);
+			//GIMSK |= (1 << PCIE);
 		}
 	}
 
@@ -396,7 +426,17 @@ ISR(WDT_vect)
 	if (drift_counter == DRIFT_TICK_COUNT ) {
 		drift_counter = 0;
 	}
-	watchdog_fired = 1;
+	
+	//Alarm
+	#define ALARM_TIMER 43200//seconds = 12 hours
+	uint32_t time_since_last_open = seconds_elapsed - last_open_times[0];
+	uint32_t time_since_last_alert = seconds_elapsed - last_alert_time;
+	
+	if ( time_since_last_open > ALARM_TIMER && time_since_last_alert > ALARM_TIMER) 
+	{
+		last_alert_time = seconds_elapsed;
+		SET_EVENT(EVENT_START_ALARM);
+	}
 }
 
 int my_itoa(int num, char* str, int base) {
