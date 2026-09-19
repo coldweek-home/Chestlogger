@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "ATtiny85",
+            "compilerPath": "C:/Program Files (x86)/Atmel/Studio/7.0/toolchain/avr8/avr8-gnu-toolchain/bin/avr-gcc.exe",
+            "compilerArgs": ["-mmcu=attiny85", "-DF_CPU=1000000UL", "-DOLED_SSD1306"],
+            "includePath": [
+                "${workspaceFolder}",
+                "C:/Program Files (x86)/Atmel/Studio/7.0/toolchain/avr8/avr8-gnu-toolchain/avr/include",
+                "C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATtiny_DFP/1.10.348/include"
+            ],
+            "defines": ["F_CPU=1000000UL", "OLED_SSD1306", "DEBUG"],
+            "cStandard": "gnu99",
+            "intelliSenseMode": "gcc-x86",
+            "browse": { "path": ["${workspaceFolder}"] }
+        }
+    ],
+    "version": 4
+}
